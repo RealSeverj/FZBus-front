@@ -1,7 +1,8 @@
-// 班次/调度相关接口封装
+// 排班相关接口封装
 import request from './axios-config';
 
-// 获取班次列表，可选根据 status 筛选
+// 获取排班列表
+// params: { status, vehicle_id, employee_id, route_id, date, start_date, end_date, include_details }
 export function fetchSchedules(params) {
 	return request({
 		url: '/schedules/',
@@ -10,15 +11,16 @@ export function fetchSchedules(params) {
 	});
 }
 
-// 获取班次详情
-export function fetchScheduleDetail(id) {
+// 获取排班详情
+export function fetchScheduleDetail(id, includeDetails = true) {
 	return request({
 		url: `/schedules/${id}`,
 		method: 'get',
+		params: { include_details: includeDetails },
 	});
 }
 
-// 创建班次
+// 创建排班
 export function createSchedule(data) {
 	return request({
 		url: '/schedules/',
@@ -27,7 +29,7 @@ export function createSchedule(data) {
 	});
 }
 
-// 更新班次
+// 更新排班
 export function updateSchedule(id, data) {
 	return request({
 		url: `/schedules/${id}`,
@@ -36,11 +38,10 @@ export function updateSchedule(id, data) {
 	});
 }
 
-// 删除班次
+// 删除排班
 export function deleteSchedule(id) {
 	return request({
 		url: `/schedules/${id}`,
 		method: 'delete',
 	});
 }
-

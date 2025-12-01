@@ -10,7 +10,7 @@ export function fetchEmployees(params) {
 	});
 }
 
-// 获取员工详情
+// 根据 ID 获取员工详情
 export function fetchEmployeeDetail(id) {
 	return request({
 		url: `/employees/${id}`,
@@ -20,6 +20,7 @@ export function fetchEmployeeDetail(id) {
 
 // 创建员工
 export function createEmployee(data) {
+	console.log(data);
 	return request({
 		url: '/employees/',
 		method: 'post',
@@ -44,3 +45,14 @@ export function deleteEmployee(id) {
 	});
 }
 
+// ========== 员工-排班查询 ==========
+
+// 获取员工的排班记录
+// params: { status, date, start_date, end_date, include_details }
+export function fetchEmployeeSchedules(employeeId, params) {
+	return request({
+		url: `/employees/${employeeId}/schedules`,
+		method: 'get',
+		params,
+	});
+}

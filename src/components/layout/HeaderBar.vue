@@ -6,11 +6,21 @@
 				<Management />
 			</el-icon>
 			<div>
-				<p class="text-base font-semibold leading-tight">FZBus 管理系统</p>
+				<p class="text-base font-semibold leading-tight">福州公交管理系统</p>
 				<p class="text-xs text-gray-500">Fuzhou Bus Console</p>
 			</div>
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex items-center gap-4">
+			<!-- 用户信息 -->
+			<div class="flex items-center gap-2 text-sm">
+				<el-icon class="text-primary"><User /></el-icon>
+				<span>欢迎您，</span>
+				<span class="font-semibold text-primary">{{ currentUsername }}</span>
+				<el-tag v-if="isSuperAdmin" type="danger" size="small">超级管理员</el-tag>
+				<el-tag v-else-if="isAdmin" type="warning" size="small">管理员</el-tag>
+				<el-tag v-else type="info" size="small">用户</el-tag>
+			</div>
+			<el-divider direction="vertical" />
 			<el-tooltip content="主题切换" placement="bottom">
 				<el-button
 					circle
@@ -34,19 +44,28 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { Management, Moon, Sunny, SwitchButton } from '@element-plus/icons-vue';
+import { Management, Moon, Sunny, SwitchButton, User } from '@element-plus/icons-vue';
 import { useTheme } from '../../store/theme';
+import { useUser } from '../../store/user';
 
 const router = useRouter();
 const { theme, toggleTheme } = useTheme();
+const { username, isAdmin, isSuperAdmin, initUser, clearUser } = useUser();
 
 const isDark = computed(() => theme.value === 'dark');
 
+// 当前用户名
+const currentUsername = computed(() => username.value || '未知用户');
+
+// 初始化用户信息
+onMounted(() => {
+	initUser();
+});
+
 const handleLogout = () => {
-	localStorage.removeItem('access_token');
-	localStorage.removeItem('current_user');
+	clearUser();
 	router.replace('/login');
 };
 </script>

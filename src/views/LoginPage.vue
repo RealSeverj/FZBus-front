@@ -47,9 +47,11 @@ import { reactive, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { loginApi } from '../api/auth';
+import { useUser } from '../store/user';
 
 const router = useRouter();
 const route = useRoute();
+const { initUser } = useUser();
 
 const form = reactive({
 	username: '',
@@ -83,6 +85,9 @@ const onSubmit = async () => {
 		if (user) {
 			localStorage.setItem('current_user', JSON.stringify(user));
 		}
+
+		// 登录后初始化用户状态，会自动刷新顶栏
+		initUser();
 
 		ElMessage.success('登录成功');
 
