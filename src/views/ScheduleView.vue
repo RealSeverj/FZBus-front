@@ -129,9 +129,14 @@
 						<span v-else class="text-gray-400">ID: {{ row.employee_id }}</span>
 					</template>
 				</el-table-column>
-				<el-table-column prop="departure_time" label="发车时间" min-width="160">
+				<el-table-column prop="scheduled_departure_time" label="预计发车" min-width="160">
 					<template #default="{ row }">
-						{{ formatDateTime(row.departure_time) }}
+						{{ formatDateTime(row.scheduled_departure_time) }}
+					</template>
+				</el-table-column>
+				<el-table-column prop="departure_time" label="实际发车" min-width="160">
+					<template #default="{ row }">
+						{{ formatDateTime(row.departure_time) || '-' }}
 					</template>
 				</el-table-column>
 				<el-table-column prop="arrival_time" label="到达时间" min-width="160">
@@ -209,12 +214,15 @@
 				<el-form-item label="选择线路" prop="route_id">
 					<el-select
 						v-model="form.route_id"
-						placeholder="请选择线路"
+						placeholder="请输入关键词搜索线路"
 						filterable
+						remote
+						:remote-method="searchRoutes"
+						:loading="routeSearchLoading"
 						class="w-full"
 					>
 						<el-option
-							v-for="r in activeRoutes"
+							v-for="r in routeOptions"
 							:key="r.id"
 							:label="`${r.code} - ${r.name}`"
 							:value="r.id"
@@ -266,21 +274,11 @@
 						</el-option>
 					</el-select>
 				</el-form-item>
-				<el-form-item label="发车时间" prop="departure_time">
+				<el-form-item label="预计发车时间" prop="scheduled_departure_time">
 					<el-date-picker
-						v-model="form.departure_time"
+						v-model="form.scheduled_departure_time"
 						type="datetime"
-						placeholder="选择发车时间"
-						format="YYYY-MM-DD HH:mm"
-						value-format="YYYY-MM-DDTHH:mm:ss"
-						class="w-full"
-					/>
-				</el-form-item>
-				<el-form-item label="预计到达" prop="arrival_time">
-					<el-date-picker
-						v-model="form.arrival_time"
-						type="datetime"
-						placeholder="选择预计到达时间"
+						placeholder="选择预计发车时间"
 						format="YYYY-MM-DD HH:mm"
 						value-format="YYYY-MM-DDTHH:mm:ss"
 						class="w-full"
@@ -319,7 +317,7 @@ import {
 } from '@/api/schedule';
 import { fetchVehicles } from '@/api/vehicle';
 import { fetchEmployees } from '@/api/employee';
-import { fetchRoutes } from '@/api/route';
+import { fetchRoutes, fetchRouteDetail } from '@/api/route';
 
 // 列表数据
 const schedules = ref([]);
@@ -329,6 +327,10 @@ const loading = ref(false);
 const allVehicles = ref([]);
 const allEmployees = ref([]);
 const allRoutes = ref([]);
+
+// 线路远程搜索
+const routeOptions = ref([]);
+const routeSearchLoading = ref(false);
 
 // 搜索筛选
 const filterDateRange = ref([]);
@@ -353,8 +355,7 @@ const form = reactive({
 	route_id: '',
 	vehicle_id: '',
 	employee_id: '',
-	departure_time: '',
-	arrival_time: '',
+	scheduled_departure_time: '',
 	status: 'scheduled',
 });
 
@@ -363,7 +364,7 @@ const rules = {
 	route_id: [{ required: true, message: '请选择线路', trigger: 'change' }],
 	vehicle_id: [{ required: true, message: '请选择车辆', trigger: 'change' }],
 	employee_id: [{ required: true, message: '请选择司机', trigger: 'change' }],
-	departure_time: [{ required: true, message: '请选择发车时间', trigger: 'change' }],
+	scheduled_departure_time: [{ required: true, message: '请选择预计发车时间', trigger: 'change' }],
 };
 
 // 计算可用的车辆（运营中）
@@ -372,8 +373,23 @@ const activeVehicles = computed(() => allVehicles.value.filter(v => v.in_service
 // 计算可用的司机（在职）
 const activeDrivers = computed(() => allEmployees.value.filter(e => e.active));
 
-// 计算可用的线路（运营中）
-const activeRoutes = computed(() => allRoutes.value.filter(r => r.active));
+// 远程搜索线路
+const searchRoutes = async (query) => {
+	if (!query) {
+		routeOptions.value = [];
+		return;
+	}
+	routeSearchLoading.value = true;
+	try {
+		const res = await fetchRoutes({ keyword: query, active: true, per_page: 20 });
+		routeOptions.value = res.items || [];
+	} catch (error) {
+		console.error('搜索线路失败:', error);
+		routeOptions.value = [];
+	} finally {
+		routeSearchLoading.value = false;
+	}
+};
 
 // 获取状态标签类型
 const getStatusTagType = (status) => {
@@ -443,14 +459,15 @@ const loadSchedules = async () => {
 // 加载关联数据
 const loadRelatedData = async () => {
 	try {
-		const [vehicles, employees, routes] = await Promise.all([
+		const [vehicles, employees, routesRes] = await Promise.all([
 			fetchVehicles(),
 			fetchEmployees(),
-			fetchRoutes(),
+			fetchRoutes({ per_page: 100 }),
 		]);
 		allVehicles.value = vehicles || [];
 		allEmployees.value = employees || [];
-		allRoutes.value = routes || [];
+		// 仅用于筛选下拉框，保留allRoutes
+		allRoutes.value = routesRes.items || routesRes || [];
 	} catch (error) {
 		console.error('加载关联数据失败:', error);
 	}
@@ -472,10 +489,10 @@ const resetForm = () => {
 	form.route_id = '';
 	form.vehicle_id = '';
 	form.employee_id = '';
-	form.departure_time = '';
-	form.arrival_time = '';
+	form.scheduled_departure_time = '';
 	form.status = 'scheduled';
 	isEdit.value = false;
+	routeOptions.value = [];
 	formRef.value?.resetFields();
 };
 
@@ -487,16 +504,26 @@ const handleAdd = () => {
 };
 
 // 编辑排班
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
 	resetForm();
 	isEdit.value = true;
 	form.id = row.id;
 	form.route_id = row.route_id;
 	form.vehicle_id = row.vehicle_id;
 	form.employee_id = row.employee_id;
-	form.departure_time = row.departure_time;
-	form.arrival_time = row.arrival_time || '';
+	form.scheduled_departure_time = row.scheduled_departure_time;
 	form.status = row.status;
+	// 将当前线路添加到选项中
+	if (row.route) {
+		routeOptions.value = [row.route];
+	} else if (row.route_id) {
+		try {
+			const routeDetail = await fetchRouteDetail(row.route_id);
+			routeOptions.value = [routeDetail];
+		} catch (error) {
+			console.error('获取线路详情失败:', error);
+		}
+	}
 	dialogVisible.value = true;
 };
 
@@ -514,11 +541,8 @@ const handleUpdateStatus = async (row, newStatus) => {
 			},
 		);
 
+		// 后端会自动处理实际发车时间和到达时间
 		const payload = { status: newStatus };
-		// 如果是完成状态，设置到达时间
-		if (newStatus === 'completed' && !row.arrival_time) {
-			payload.arrival_time = new Date().toISOString();
-		}
 
 		await updateSchedule(row.id, payload);
 		ElMessage.success('状态更新成功');
@@ -561,19 +585,25 @@ const handleSubmit = async () => {
 		await formRef.value.validate();
 		submitting.value = true;
 
-		const payload = {
-			route_id: form.route_id,
-			vehicle_id: form.vehicle_id,
-			employee_id: form.employee_id,
-			departure_time: form.departure_time,
-			arrival_time: form.arrival_time || null,
-			status: form.status,
-		};
-
 		if (isEdit.value) {
+			// 编辑时可以更新预计发车时间、关联ID和状态
+			const payload = {
+				route_id: form.route_id,
+				vehicle_id: form.vehicle_id,
+				employee_id: form.employee_id,
+				scheduled_departure_time: form.scheduled_departure_time,
+				status: form.status,
+			};
 			await updateSchedule(form.id, payload);
 			ElMessage.success('更新成功');
 		} else {
+			// 创建时只需要提交预计发车时间和关联ID
+			const payload = {
+				route_id: form.route_id,
+				vehicle_id: form.vehicle_id,
+				employee_id: form.employee_id,
+				scheduled_departure_time: form.scheduled_departure_time,
+			};
 			await createSchedule(payload);
 			ElMessage.success('创建成功');
 		}

@@ -17,6 +17,10 @@
 			<el-icon><Guide /></el-icon>
 			<span>线路管理</span>
 		</el-menu-item>
+		<el-menu-item index="/busstops">
+			<el-icon><Location /></el-icon>
+			<span>站点管理</span>
+		</el-menu-item>
 		<el-menu-item index="/schedules">
 			<el-icon><Timer /></el-icon>
 			<span>班次管理</span>
@@ -35,7 +39,7 @@
 <script setup>
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { House, User, Guide, Timer, Van, UserFilled } from '@element-plus/icons-vue';
+import { House, User, Guide, Timer, Van, UserFilled, Location } from '@element-plus/icons-vue';
 
 const route = useRoute();
 

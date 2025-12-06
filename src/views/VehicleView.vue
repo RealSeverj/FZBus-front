@@ -232,7 +232,9 @@
 						v-model="selectedRouteIds"
 						multiple
 						filterable
-						placeholder="请选择要分配的线路"
+						remote
+						:remote-method="searchRoutes"
+						placeholder="请输入关键词搜索线路"
 						class="w-full"
 						:loading="routesLoading"
 					>
@@ -391,7 +393,7 @@ const formRef = ref(null);
 // 线路分配对话框
 const routeDialogVisible = ref(false);
 const currentVehicle = ref(null);
-const allRoutes = ref([]);
+const routeOptions = ref([]);
 const selectedRouteIds = ref([]);
 const routesLoading = ref(false);
 const assigningRoutes = ref(false);
@@ -446,9 +448,9 @@ const filteredVehicles = computed(() => {
 
 // 计算可分配的线路（排除已分配的）
 const availableRoutes = computed(() => {
-	if (!currentVehicle.value) return allRoutes.value;
+	if (!currentVehicle.value) return routeOptions.value;
 	const assignedIds = (currentVehicle.value.routes || []).map(r => r.id);
-	return allRoutes.value.filter(r => !assignedIds.includes(r.id) && r.active);
+	return routeOptions.value.filter(r => !assignedIds.includes(r.id));
 });
 
 // 计算总数
@@ -487,14 +489,19 @@ const loadVehicles = async () => {
 	}
 };
 
-// 加载所有线路
-const loadRoutes = async () => {
+// 远程搜索线路
+const searchRoutes = async (query) => {
+	if (!query) {
+		routeOptions.value = [];
+		return;
+	}
 	routesLoading.value = true;
 	try {
-		const data = await fetchRoutes();
-		allRoutes.value = data || [];
+		const res = await fetchRoutes({ keyword: query, active: true, per_page: 20 });
+		routeOptions.value = res.items || [];
 	} catch (error) {
-		console.error('获取线路列表失败:', error);
+		console.error('搜索线路失败:', error);
+		routeOptions.value = [];
 	} finally {
 		routesLoading.value = false;
 	}
@@ -563,11 +570,11 @@ const handleDelete = async (row) => {
 };
 
 // 打开分配线路对话框
-const handleAssignRoute = async (row) => {
+const handleAssignRoute = (row) => {
 	currentVehicle.value = row;
 	selectedRouteIds.value = [];
+	routeOptions.value = [];
 	routeDialogVisible.value = true;
-	await loadRoutes();
 };
 
 // 确认分配线路

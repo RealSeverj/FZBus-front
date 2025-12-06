@@ -12,11 +12,17 @@ export function fetchRoutes(params) {
 }
 
 // 获取线路详情
-export function fetchRouteDetail(id, includeVehicles = true) {
+// params: { include_vehicles, include_busstops, include_polyline }
+export function fetchRouteDetail(id, params = {}) {
 	return request({
 		url: `/routes/${id}`,
 		method: 'get',
-		params: { include_vehicles: includeVehicles },
+		params: {
+			include_vehicles: params.include_vehicles ?? true,
+			include_busstops: params.include_busstops ?? true,
+			include_polyline: params.include_polyline ?? false,
+			...params,
+		},
 	});
 }
 
@@ -81,6 +87,43 @@ export function removeVehicleFromRoute(routeId, vehicleId) {
 export function fetchRouteSchedules(routeId, params) {
 	return request({
 		url: `/routes/${routeId}/schedules`,
+		method: 'get',
+		params,
+	});
+}
+
+// ========== 线路-站点关联管理 ==========
+
+// 获取线路的站点列表（按顺序排列）
+export function fetchRouteBusstops(routeId) {
+	return request({
+		url: `/routes/${routeId}/busstops`,
+		method: 'get',
+	});
+}
+
+// 设置线路的站点列表
+// data: { busstops: [{ amap_id, name, location, sequence }, ...] }
+export function setRouteBusstops(routeId, data) {
+	return request({
+		url: `/routes/${routeId}/busstops`,
+		method: 'post',
+		data,
+	});
+}
+
+// 清除线路的所有站点关联
+export function clearRouteBusstops(routeId) {
+	return request({
+		url: `/routes/${routeId}/busstops`,
+		method: 'delete',
+	});
+}
+
+// 通过高德ID获取线路详情
+export function fetchRouteByAmapId(amapId, params) {
+	return request({
+		url: `/routes/by-amap-id/${amapId}`,
 		method: 'get',
 		params,
 	});

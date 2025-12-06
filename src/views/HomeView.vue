@@ -30,18 +30,15 @@
 			</el-card>
 		</div>
 
-		<!-- 最近班次列表 -->
-		<el-card shadow="never" class="rounded-2xl border">
-			<template #header>
-				<div class="flex items-center justify-between">
-					<span class="text-sm font-medium">最近班次</span>
-					<el-tag size="small" type="info">占位内容</el-tag>
-				</div>
-			</template>
-			<p class="text-sm text-gray-500">
-				后续可以在这里展示最近的班次列表或图表，例如使用表格、时间轴或图表组件。
-			</p>
-		</el-card>
+		<!-- 实时车辆监控地图 和 准点率统计 并排显示 -->
+		<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+			<el-card shadow="never" class="rounded-2xl border">
+				<RunningVehicleMap />
+			</el-card>
+			<el-card shadow="never" class="rounded-2xl border">
+				<ScheduleStatistics />
+			</el-card>
+		</div>
 	</div>
 </template>
 
@@ -51,6 +48,8 @@ import { fetchVehicles } from '../api/vehicle';
 import { fetchEmployees } from '../api/employee';
 import { fetchRoutes } from '../api/route';
 import { fetchSchedules } from '../api/schedule';
+import RunningVehicleMap from '../components/home/RunningVehicleMap.vue';
+import ScheduleStatistics from '../components/home/ScheduleStatistics.vue';
 
 const stats = reactive({
 	vehicles: 0,
@@ -63,13 +62,13 @@ const loadStats = async () => {
 	try {
 		const [vehicles, routes, employees, schedules] = await Promise.all([
 			fetchVehicles(),
-			fetchRoutes(),
+			fetchRoutes({ per_page: 1 }), // 只需获取 total，减少数据传输
 			fetchEmployees({ active: 'true' }),
 			fetchSchedules(),
 		]);
 
 		stats.vehicles = Array.isArray(vehicles) ? vehicles.length : 0;
-		stats.routes = Array.isArray(routes) ? routes.length : 0;
+		stats.routes = routes?.total ?? 0; // 使用分页接口返回的 total
 		stats.employees = Array.isArray(employees) ? employees.length : 0;
 		stats.schedules = Array.isArray(schedules) ? schedules.length : 0;
 	} catch (e) {

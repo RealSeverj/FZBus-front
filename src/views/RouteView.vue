@@ -13,37 +13,29 @@
 		<el-card class="mb-6" shadow="never">
 			<div class="flex flex-wrap gap-4 items-center">
 				<el-input
-					v-model="searchCode"
-					placeholder="搜索线路编号"
+					v-model="searchKeyword"
+					placeholder="搜索线路编号/名称/起终点/归属"
 					clearable
-					class="w-40"
-					@clear="loadRoutes"
-					@keyup.enter="loadRoutes"
+					class="w-64"
+					@clear="handleSearch"
+					@keyup.enter="handleSearch"
 				>
 					<template #prefix>
 						<el-icon><Search /></el-icon>
 					</template>
 				</el-input>
-				<el-input
-					v-model="searchName"
-					placeholder="搜索线路名称"
-					clearable
-					class="w-48"
-					@clear="loadRoutes"
-					@keyup.enter="loadRoutes"
-				/>
 				<el-select
 					v-model="filterActive"
 					placeholder="线路状态"
 					clearable
 					class="w-32"
-					@change="loadRoutes"
+					@change="handleSearch"
 				>
 					<el-option label="全部" value="" />
 					<el-option label="运营中" value="true" />
 					<el-option label="已停运" value="false" />
 				</el-select>
-				<el-button type="primary" @click="loadRoutes">
+				<el-button type="primary" @click="handleSearch">
 					<el-icon class="mr-1"><Search /></el-icon>
 					查询
 				</el-button>
@@ -58,34 +50,51 @@
 		<el-card shadow="never">
 			<el-table
 				v-loading="loading"
-				:data="filteredRoutes"
+				:data="routes"
 				stripe
 				border
 				class="w-full"
 				:header-cell-style="{ fontWeight: 'bold' }"
+				:default-sort="{ prop: 'id', order: 'ascending' }"
+				@sort-change="handleSortChange"
 			>
-				<el-table-column prop="id" label="ID" width="70" align="center" />
-				<el-table-column prop="code" label="线路编号" width="100">
+				<el-table-column prop="id" label="ID" width="70" align="center" sortable="custom" />
+				<el-table-column prop="code" label="线路编号" width="100" sortable="custom">
 					<template #default="{ row }">
 						<span class="font-semibold text-primary">{{ row.code }}</span>
 					</template>
 				</el-table-column>
-				<el-table-column prop="name" label="线路名称" min-width="140" />
-				<el-table-column prop="origin" label="起点" min-width="120">
+				<el-table-column prop="name" label="线路名称" min-width="140" sortable="custom" />
+				<el-table-column prop="origin" label="起点" min-width="120" sortable="custom">
 					<template #default="{ row }">
 						<el-icon class="text-green-500 mr-1"><LocationFilled /></el-icon>
 						{{ row.origin }}
 					</template>
 				</el-table-column>
-				<el-table-column prop="destination" label="终点" min-width="120">
+				<el-table-column prop="destination" label="终点" min-width="120" sortable="custom">
 					<template #default="{ row }">
 						<el-icon class="text-red-500 mr-1"><LocationFilled /></el-icon>
 						{{ row.destination }}
 					</template>
 				</el-table-column>
-				<el-table-column prop="distance_km" label="里程" width="100" align="center">
+				<el-table-column prop="fare_price" label="票价" width="100" align="center" sortable="custom">
 					<template #default="{ row }">
-						<span v-if="row.distance_km">{{ row.distance_km }} km</span>
+						<span class="font-semibold">¥{{ row.fare_price ?? 2.0 }}</span>
+						<span v-if="row.fare_discount && row.fare_discount < 1" class="text-xs text-orange-500 ml-1">
+							({{ (row.fare_discount * 10).toFixed(0) }}折)
+						</span>
+					</template>
+				</el-table-column>
+				<el-table-column prop="monthly_pass_enabled" label="月票" width="80" align="center" sortable="custom">
+					<template #default="{ row }">
+						<el-tag :type="row.monthly_pass_enabled ? 'success' : 'info'" size="small">
+							{{ row.monthly_pass_enabled ? '可用' : '不可用' }}
+						</el-tag>
+					</template>
+				</el-table-column>
+				<el-table-column prop="ownership" label="归属" min-width="120" sortable="custom">
+					<template #default="{ row }">
+						<span v-if="row.ownership">{{ row.ownership }}</span>
 						<span v-else class="text-gray-400">-</span>
 					</template>
 				</el-table-column>
@@ -106,15 +115,19 @@
 						<span v-else class="text-gray-400">未分配</span>
 					</template>
 				</el-table-column>
-				<el-table-column prop="active" label="状态" width="100" align="center">
+				<el-table-column prop="active" label="状态" width="100" align="center" sortable="custom">
 					<template #default="{ row }">
 						<el-tag :type="row.active ? 'success' : 'danger'">
 							{{ row.active ? '运营中' : '已停运' }}
 						</el-tag>
 					</template>
 				</el-table-column>
-				<el-table-column label="操作" width="280" align="center" fixed="right">
+				<el-table-column label="操作" width="340" align="center" fixed="right">
 					<template #default="{ row }">
+						<el-button type="warning" link size="small" @click="handleViewRouteDetail(row)">
+							<el-icon class="mr-1"><MapLocation /></el-icon>
+							详情
+						</el-button>
 						<el-button type="info" link size="small" @click="handleViewSchedules(row)">
 							<el-icon class="mr-1"><Calendar /></el-icon>
 							排班
@@ -144,6 +157,8 @@
 					:total="totalCount"
 					layout="total, sizes, prev, pager, next, jumper"
 					background
+					@size-change="loadRoutes"
+					@current-change="loadRoutes"
 				/>
 			</div>
 		</el-card>
@@ -191,17 +206,52 @@
 						maxlength="100"
 					/>
 				</el-form-item>
-				<el-form-item label="线路里程" prop="distance_km">
+				<el-form-item label="票价" prop="fare_price">
 					<el-input-number
-						v-model="form.distance_km"
+						v-model="form.fare_price"
 						:min="0"
-						:max="1000"
-						:precision="1"
-						placeholder="请输入里程"
-						class="w-full"
-					>
-						<template #suffix>km</template>
-					</el-input-number>
+						:max="100"
+						:precision="2"
+						placeholder="请输入票价"
+						class="w-40"
+					/>
+					<span class="ml-2 text-gray-500">元</span>
+				</el-form-item>
+				<el-form-item label="票证折扣" prop="fare_discount">
+					<el-input-number
+						v-model="form.fare_discount"
+						:min="0"
+						:max="1"
+						:step="0.1"
+						:precision="2"
+						placeholder="折扣比例"
+						class="w-40"
+					/>
+					<span class="ml-2 text-gray-500 text-sm">0=无效, 0.9=九折, 1=不打折</span>
+				</el-form-item>
+				<el-form-item label="月票可用" prop="monthly_pass_enabled">
+					<el-switch
+						v-model="form.monthly_pass_enabled"
+						active-text="可用"
+						inactive-text="不可用"
+						inline-prompt
+					/>
+				</el-form-item>
+				<el-form-item label="线路归属" prop="ownership">
+					<el-input
+						v-model="form.ownership"
+						placeholder="请输入线路归属，如公交公司名称"
+						maxlength="100"
+					/>
+				</el-form-item>
+				<el-form-item label="备注" prop="remarks">
+					<el-input
+						v-model="form.remarks"
+						type="textarea"
+						:rows="2"
+						placeholder="请输入线路备注信息"
+						maxlength="500"
+					/>
 				</el-form-item>
 				<el-form-item label="状态" prop="active">
 					<el-switch
@@ -366,15 +416,37 @@
 				</div>
 			</template>
 		</el-dialog>
+
+		<!-- 线路详情对话框（地图展示） -->
+		<el-dialog
+			v-model="routeDetailDialogVisible"
+			:title="`线路详情 - ${routeDetailData?.code || ''}`"
+			width="1000px"
+			destroy-on-close
+			@close="handleCloseRouteDetail"
+		>
+			<RouteMapViewer
+				:route="routeDetailData"
+				:busstops="routeDetailBusstops"
+				:polyline="routeDetailPolyline"
+				:loading="routeDetailLoading"
+			/>
+			<template #footer>
+				<div class="flex justify-end">
+					<el-button @click="routeDetailDialogVisible = false">关闭</el-button>
+				</div>
+			</template>
+		</el-dialog>
 	</div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Search, Refresh, Edit, Delete, Van, LocationFilled, Calendar } from '@element-plus/icons-vue';
+import { Plus, Search, Refresh, Edit, Delete, Van, LocationFilled, Calendar, MapLocation } from '@element-plus/icons-vue';
 import {
 	fetchRoutes,
+	fetchRouteDetail,
 	createRoute,
 	updateRoute,
 	deleteRoute,
@@ -383,19 +455,24 @@ import {
 	fetchRouteSchedules,
 } from '@/api/route';
 import { fetchVehicles } from '@/api/vehicle';
+import RouteMapViewer from '@/components/routes/RouteMapViewer.vue';
 
 // 列表数据
 const routes = ref([]);
 const loading = ref(false);
+const totalCount = ref(0);
 
 // 搜索筛选
-const searchCode = ref('');
-const searchName = ref('');
+const searchKeyword = ref('');
 const filterActive = ref('');
+
+// 排序
+const sortBy = ref('id');
+const sortOrder = ref('asc');
 
 // 分页
 const currentPage = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(20);
 
 // 对话框
 const dialogVisible = ref(false);
@@ -418,6 +495,13 @@ const schedulesLoading = ref(false);
 const scheduleDateRange = ref([]);
 const scheduleStatus = ref('');
 
+// 线路详情对话框（地图展示）
+const routeDetailDialogVisible = ref(false);
+const routeDetailData = ref(null);
+const routeDetailBusstops = ref([]);
+const routeDetailPolyline = ref('');
+const routeDetailLoading = ref(false);
+
 // 表单数据
 const form = reactive({
 	id: null,
@@ -425,7 +509,11 @@ const form = reactive({
 	name: '',
 	origin: '',
 	destination: '',
-	distance_km: null,
+	fare_price: 2.0,
+	fare_discount: 1.0,
+	monthly_pass_enabled: true,
+	ownership: '',
+	remarks: '',
 	active: true,
 });
 
@@ -447,27 +535,6 @@ const rules = {
 	],
 };
 
-// 计算过滤后的线路列表
-const filteredRoutes = computed(() => {
-	let result = routes.value;
-
-	// 按线路编号搜索
-	if (searchCode.value) {
-		result = result.filter((r) =>
-			r.code.toLowerCase().includes(searchCode.value.toLowerCase()),
-		);
-	}
-
-	// 按线路名称搜索
-	if (searchName.value) {
-		result = result.filter((r) =>
-			r.name.toLowerCase().includes(searchName.value.toLowerCase()),
-		);
-	}
-
-	return result;
-});
-
 // 计算可分配的车辆（排除已分配的）
 const availableVehicles = computed(() => {
 	if (!currentRoute.value) return allVehicles.value;
@@ -475,24 +542,52 @@ const availableVehicles = computed(() => {
 	return allVehicles.value.filter(v => !assignedIds.includes(v.id) && v.in_service);
 });
 
-// 计算总数
-const totalCount = computed(() => filteredRoutes.value.length);
-
-// 加载线路列表
+// 加载线路列表（后端分页）
 const loadRoutes = async () => {
 	loading.value = true;
 	try {
-		const params = { include_vehicles: true };
+		const params = {
+			include_vehicles: true,
+			page: currentPage.value,
+			per_page: pageSize.value,
+			sort_by: sortBy.value,
+			order: sortOrder.value,
+		};
 		if (filterActive.value !== '') {
 			params.active = filterActive.value;
 		}
+		if (searchKeyword.value.trim()) {
+			params.keyword = searchKeyword.value.trim();
+		}
 		const data = await fetchRoutes(params);
-		routes.value = data || [];
+		routes.value = data.items || [];
+		totalCount.value = data.total || 0;
 	} catch (error) {
 		console.error('获取线路列表失败:', error);
+		routes.value = [];
+		totalCount.value = 0;
 	} finally {
 		loading.value = false;
 	}
+};
+
+// 搜索（重置到第一页）
+const handleSearch = () => {
+	currentPage.value = 1;
+	loadRoutes();
+};
+
+// 表格排序变化
+const handleSortChange = ({ prop, order }) => {
+	if (prop && order) {
+		sortBy.value = prop;
+		sortOrder.value = order === 'ascending' ? 'asc' : 'desc';
+	} else {
+		sortBy.value = 'id';
+		sortOrder.value = 'asc';
+	}
+	currentPage.value = 1;
+	loadRoutes();
 };
 
 // 加载所有车辆
@@ -510,9 +605,11 @@ const loadVehicles = async () => {
 
 // 重置筛选条件
 const resetFilters = () => {
-	searchCode.value = '';
-	searchName.value = '';
+	searchKeyword.value = '';
 	filterActive.value = '';
+	sortBy.value = 'id';
+	sortOrder.value = 'asc';
+	currentPage.value = 1;
 	loadRoutes();
 };
 
@@ -523,7 +620,11 @@ const resetForm = () => {
 	form.name = '';
 	form.origin = '';
 	form.destination = '';
-	form.distance_km = null;
+	form.fare_price = 2.0;
+	form.fare_discount = 1.0;
+	form.monthly_pass_enabled = true;
+	form.ownership = '';
+	form.remarks = '';
 	form.active = true;
 	isEdit.value = false;
 	formRef.value?.resetFields();
@@ -545,7 +646,11 @@ const handleEdit = (row) => {
 	form.name = row.name;
 	form.origin = row.origin;
 	form.destination = row.destination;
-	form.distance_km = row.distance_km;
+	form.fare_price = row.fare_price ?? 2.0;
+	form.fare_discount = row.fare_discount ?? 1.0;
+	form.monthly_pass_enabled = row.monthly_pass_enabled ?? true;
+	form.ownership = row.ownership || '';
+	form.remarks = row.remarks || '';
 	form.active = row.active;
 	dialogVisible.value = true;
 };
@@ -636,7 +741,11 @@ const handleSubmit = async () => {
 			name: form.name,
 			origin: form.origin,
 			destination: form.destination,
-			distance_km: form.distance_km || null,
+			fare_price: form.fare_price,
+			fare_discount: form.fare_discount,
+			monthly_pass_enabled: form.monthly_pass_enabled,
+			ownership: form.ownership || null,
+			remarks: form.remarks || null,
 			active: form.active,
 		};
 
@@ -727,6 +836,42 @@ const loadRouteSchedules = async () => {
 	} finally {
 		schedulesLoading.value = false;
 	}
+};
+
+// ========== 线路详情查看功能 ==========
+
+// 打开线路详情对话框（地图展示）
+const handleViewRouteDetail = async (row) => {
+	routeDetailDialogVisible.value = true;
+	routeDetailLoading.value = true;
+	routeDetailData.value = row;
+	routeDetailBusstops.value = [];
+	routeDetailPolyline.value = '';
+	
+	try {
+		// 获取完整线路详情（包含站点和路径）
+		const data = await fetchRouteDetail(row.id, {
+			include_vehicles: true,
+			include_busstops: true,
+			include_polyline: true,
+		});
+		
+		routeDetailData.value = data;
+		routeDetailBusstops.value = data.busstops || [];
+		routeDetailPolyline.value = data.polyline || '';
+	} catch (error) {
+		console.error('获取线路详情失败:', error);
+		ElMessage.error('获取线路详情失败');
+	} finally {
+		routeDetailLoading.value = false;
+	}
+};
+
+// 关闭线路详情对话框
+const handleCloseRouteDetail = () => {
+	routeDetailData.value = null;
+	routeDetailBusstops.value = [];
+	routeDetailPolyline.value = '';
 };
 
 // 页面加载时获取数据

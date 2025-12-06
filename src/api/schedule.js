@@ -45,3 +45,13 @@ export function deleteSchedule(id) {
 		method: 'delete',
 	});
 }
+
+// 获取班次统计数据
+// params: { date, start_date, end_date, route_id, vehicle_id, employee_id }
+export function fetchScheduleStatistics(params) {
+	return request({
+		url: '/schedules/statistics',
+		method: 'get',
+		params,
+	});
+}

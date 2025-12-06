@@ -5,6 +5,7 @@ import EmployeeView from '../views/EmployeeView.vue';
 import RouteView from '../views/RouteView.vue';
 import ScheduleView from '../views/ScheduleView.vue';
 import UserView from '../views/UserView.vue';
+import BusstopView from '../views/BusstopView.vue';
 import LoginPage from '../views/LoginPage.vue';
 
 const routes = [
@@ -47,6 +48,12 @@ const routes = [
     path: '/users',
     name: 'Users',
     component: UserView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/busstops',
+    name: 'Busstops',
+    component: BusstopView,
     meta: { requiresAuth: true },
   },
 ];
