@@ -128,7 +128,6 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
-import { ElMessage } from 'element-plus';
 import {
 	LocationFilled,
 	Clock,
@@ -139,8 +138,7 @@ import {
 	InfoFilled,
 	Loading,
 } from '@element-plus/icons-vue';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import AMapLoader from '@amap/amap-jsapi-loader';
 
 // Props
 const props = defineProps({
@@ -162,62 +160,70 @@ const props = defineProps({
 	},
 });
 
-// 地图相关
+// 地图相关（高德）
 const mapContainer = ref(null);
 let map = null;
+let AMap = null;
 let polylineLayer = null;
-let markersLayer = null;
+let markersLayer = [];
 let selectedMarker = null;
+
+// 将站点的 location 字符串解析为 latitude/longitude 字段
+const normalizeBusstops = (busstops) => {
+	if (!Array.isArray(busstops)) return [];
+	return busstops.map((stop) => {
+		if (stop && !stop.latitude && !stop.longitude && typeof stop.location === 'string') {
+			const [lngStr, latStr] = stop.location.split(',');
+			const lng = Number(lngStr);
+			const lat = Number(latStr);
+			if (!Number.isNaN(lng) && !Number.isNaN(lat)) {
+				return {
+					...stop,
+					longitude: lng,
+					latitude: lat,
+				};
+			}
+		}
+		return stop;
+	});
+};
 
 // 选中的站点
 const selectedStopId = ref(null);
 
-// 修复 Leaflet 默认图标问题
-const fixLeafletIcons = () => {
-	delete L.Icon.Default.prototype._getIconUrl;
-	L.Icon.Default.mergeOptions({
-		iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-		iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-		shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-	});
-};
-
 // 创建站点图标
-const createStopIcon = (index, isSelected = false) => {
+const createStopMarker = (stop, index, isSelected = false) => {
+	if (!AMap || !stop?.latitude || !stop?.longitude) return null;
 	const isFirst = index === 0;
 	const isLast = props.busstops.length > 0 && index === props.busstops.length - 1;
-	
-	let bgColor = '#409EFF'; // 普通站点：蓝色
-	if (isFirst) bgColor = '#67C23A'; // 起点：绿色
-	else if (isLast) bgColor = '#F56C6C'; // 终点：红色
-	
+	let bgColor = '#409EFF';
+	if (isFirst) bgColor = '#67C23A';
+	else if (isLast) bgColor = '#F56C6C';
 	const size = isSelected ? 32 : 24;
 	const border = isSelected ? 4 : 3;
 	const fontSize = isSelected ? 14 : 11;
-
-	return L.divIcon({
-		className: 'bus-stop-marker',
-		html: `<div style="
-			background-color: ${bgColor};
-			width: ${size}px;
-			height: ${size}px;
-			border-radius: 50%;
-			border: ${border}px solid white;
-			box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			${isSelected ? 'animation: pulse 1.5s infinite;' : ''}
-		">
-			<span style="color: white; font-size: ${fontSize}px; font-weight: bold;">${index + 1}</span>
-		</div>`,
-		iconSize: [size, size],
-		iconAnchor: [size / 2, size / 2],
-		popupAnchor: [0, -size / 2],
+	const content = `<div style="
+		background-color: ${bgColor};
+		width: ${size}px;
+		height: ${size}px;
+		border-radius: 50%;
+		border: ${border}px solid white;
+		box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		${isSelected ? 'animation: pulse 1.5s infinite;' : ''}
+	">
+		<span style="color: white; font-size: ${fontSize}px; font-weight: bold;">${index + 1}</span>
+	</div>`;
+	return new AMap.Marker({
+		position: [stop.longitude, stop.latitude],
+		content,
+		offset: new AMap.Pixel(size / -2, size / -2),
 	});
 };
 
-// 解析 polyline 字符串为坐标数组
+// 解析 polyline 字符串为坐标数组（[lat, lng]）
 const parsePolyline = (polylineStr) => {
 	if (!polylineStr) return [];
 	
@@ -233,29 +239,22 @@ const parsePolyline = (polylineStr) => {
 	return points;
 };
 
-// 初始化地图
-const initMap = () => {
+// 初始化地图（高德）
+const initMap = async () => {
 	if (!mapContainer.value) return;
+	if (map) return;
 
-	fixLeafletIcons();
-
-	// 福州市中心坐标
-	const fuzhhouCenter = [26.08, 119.3];
-
-	map = L.map(mapContainer.value, {
-		center: fuzhhouCenter,
-		zoom: 13,
-		zoomControl: true,
+	AMap = await AMapLoader.load({
+		key: import.meta.env.VITE_AMAP_KEY,
+		version: '2.0',
+		plugins: ['AMap.Marker', 'AMap.Polyline', 'AMap.ToolBar'],
 	});
 
-	// 使用 OpenStreetMap 瓦片图层
-	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-		maxZoom: 19,
-	}).addTo(map);
-
-	// 创建图层组
-	markersLayer = L.layerGroup().addTo(map);
+	map = new AMap.Map(mapContainer.value, {
+		center: [119.3, 26.08],
+		zoom: 13,
+	});
+	map.addControl(new AMap.ToolBar());
 	
 	// 绘制线路和站点
 	drawRoute();
@@ -266,59 +265,54 @@ const drawRoute = () => {
 	if (!map) return;
 
 	// 清除已有图层
-	if (polylineLayer) {
-		map.removeLayer(polylineLayer);
+	if (polylineLayer && map) {
+		map.remove(polylineLayer);
 		polylineLayer = null;
 	}
-	markersLayer?.clearLayers();
-
-	// 绘制线路路径
-	const pathPoints = parsePolyline(props.polyline);
-	if (pathPoints.length > 1) {
-		polylineLayer = L.polyline(pathPoints, {
-			color: '#409EFF',
-			weight: 5,
-			opacity: 0.8,
-		}).addTo(map);
-
-		// 调整地图视野以适应线路
-		map.fitBounds(polylineLayer.getBounds(), { padding: [20, 20] });
+	if (markersLayer.length && map) {
+		map.remove(markersLayer);
+		markersLayer = [];
 	}
 
+	const pathPoints = parsePolyline(props.polyline);
+	const allLngLat = [];
+
+	// 绘制线路路径
+	if (pathPoints.length > 1 && AMap && map) {
+		const pathLngLat = pathPoints.map((p) => [p[1], p[0]]); // [lng, lat]
+		polylineLayer = new AMap.Polyline({
+			path: pathLngLat,
+			strokeColor: '#409EFF',
+			strokeWeight: 5,
+			strokeOpacity: 0.8,
+		});
+		map.add(polylineLayer);
+		allLngLat.push(...pathLngLat.map(([lng, lat]) => new AMap.LngLat(lng, lat)));
+	}
+
+	// 规范化站点坐标
+	const normalizedBusstops = normalizeBusstops(props.busstops || []);
+
 	// 绘制站点标记
-	props.busstops.forEach((stop, index) => {
+	normalizedBusstops.forEach((stop, index) => {
 		if (stop.latitude && stop.longitude) {
-			const marker = L.marker([stop.latitude, stop.longitude], {
-				icon: createStopIcon(index),
-			});
-
-			marker.bindPopup(`
-				<div style="min-width: 150px;">
-					<h4 style="margin: 0 0 8px 0; font-weight: bold;">${stop.name}</h4>
-					<p style="margin: 4px 0; font-size: 12px; color: #666;">第 ${stop.sequence || index + 1} 站</p>
-					${stop.amap_id ? `<p style="margin: 4px 0; font-size: 12px; color: #999;">高德ID: ${stop.amap_id}</p>` : ''}
-				</div>
-			`);
-
-			marker.stopId = stop.id;
-			marker.stopIndex = index;
-			
+			const marker = createStopMarker(stop, index, false);
+			if (!marker) return;
 			marker.on('click', () => {
 				selectedStopId.value = stop.id;
 				highlightMarker(index);
 			});
-
-			markersLayer.addLayer(marker);
+			markersLayer.push(marker);
+			allLngLat.push(marker.getPosition());
 		}
 	});
 
-	// 如果没有路径但有站点，则根据站点调整视野
-	if (pathPoints.length <= 1 && props.busstops.length > 0) {
-		const validStops = props.busstops.filter(s => s.latitude && s.longitude);
-		if (validStops.length > 0) {
-			const bounds = L.latLngBounds(validStops.map(s => [s.latitude, s.longitude]));
-			map.fitBounds(bounds, { padding: [50, 50] });
-		}
+	if (markersLayer.length && map) {
+		map.add(markersLayer);
+	}
+
+	if (allLngLat.length && map) {
+		map.setFitView(allLngLat, true, [20, 20, 20, 20]);
 	}
 };
 
@@ -327,33 +321,20 @@ const highlightMarker = (targetIndex) => {
 	if (!markersLayer) return;
 
 	// 移除之前的选中标记
-	if (selectedMarker) {
-		map.removeLayer(selectedMarker);
+	if (selectedMarker && map) {
+		map.remove(selectedMarker);
 		selectedMarker = null;
 	}
 
 	// 找到目标站点
 	const stop = props.busstops[targetIndex];
-	if (!stop || !stop.latitude || !stop.longitude) return;
+	if (!stop || !stop.latitude || !stop.longitude || !AMap || !map) return;
 
-	// 创建选中标记
-	selectedMarker = L.marker([stop.latitude, stop.longitude], {
-		icon: createStopIcon(targetIndex, true),
-		zIndexOffset: 1000,
-	}).addTo(map);
-
-	selectedMarker.bindPopup(`
-		<div style="min-width: 150px;">
-			<h4 style="margin: 0 0 8px 0; font-weight: bold; color: #E6A23C;">${stop.name}</h4>
-			<p style="margin: 4px 0; font-size: 12px; color: #666;">第 ${stop.sequence || targetIndex + 1} 站</p>
-			${stop.amap_id ? `<p style="margin: 4px 0; font-size: 12px; color: #999;">高德ID: ${stop.amap_id}</p>` : ''}
-		</div>
-	`).openPopup();
-
-	// 平滑移动到该位置
-	map.setView([stop.latitude, stop.longitude], Math.max(map.getZoom(), 15), {
-		animate: true,
-	});
+	selectedMarker = createStopMarker(stop, targetIndex, true);
+	if (selectedMarker) {
+		map.add(selectedMarker);
+		map.setZoomAndCenter(Math.max(map.getZoom(), 15), [stop.longitude, stop.latitude]);
+	}
 };
 
 // 处理站点点击
@@ -396,15 +377,15 @@ watch(
 
 // 组件挂载
 onMounted(() => {
-	nextTick(() => {
-		initMap();
+	nextTick(async () => {
+		await initMap();
 	});
 });
 
 // 组件卸载
 onBeforeUnmount(() => {
 	if (map) {
-		map.remove();
+		map.destroy();
 		map = null;
 	}
 });
