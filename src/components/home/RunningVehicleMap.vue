@@ -37,21 +37,9 @@
 				</button>
 				<!-- 图例 -->
 				<div class="absolute bottom-4 left-4 bg-white bg-opacity-90 rounded-lg p-3 shadow-md text-xs">
-					<div class="flex items-center gap-2 mb-1">
+					<div class="flex items-center gap-2">
 						<div class="w-3 h-3 rounded-full bg-orange-500"></div>
 						<span>车辆当前位置</span>
-					</div>
-					<div class="flex items-center gap-2 mb-1">
-						<div class="w-3 h-3 rounded-full bg-green-500"></div>
-						<span>起点站</span>
-					</div>
-					<div class="flex items-center gap-2 mb-1">
-						<div class="w-3 h-3 rounded-full bg-red-500"></div>
-						<span>终点站</span>
-					</div>
-					<div class="flex items-center gap-2">
-						<div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-						<span>当前最近站点</span>
 					</div>
 				</div>
 			</div>
@@ -136,7 +124,6 @@ let map = null;
 let AMap = null;
 let vehicleMarkers = new Map();
 let routePolylines = [];
-let stopMarkers = [];
 
 // 数据
 const runningVehicles = ref([]);
@@ -175,36 +162,6 @@ const createVehicleMarker = (position, isSelected = false) => {
 		content,
 		offset: new AMap.Pixel((isSelected ? 40 : 32) / -2, (isSelected ? 40 : 32) / -2),
 		zIndex: 1000,
-	});
-};
-
-// 创建站点图标
-const createStopMarker = (stop, type, index = 0) => {
-	if (!AMap || !map || !stop?.latitude || !stop?.longitude) return null;
-	let bgColor = '#3B82F6';
-	if (type === 'start') bgColor = '#22C55E';
-	else if (type === 'end') bgColor = '#EF4444';
-	else if (type === 'current') bgColor = '#EAB308';
-	const size = type === 'current' ? 28 : 24;
-	const content = `
-		<div style="
-			background-color: ${bgColor};
-			width: ${size}px;
-			height: ${size}px;
-			border-radius: 50%;
-			border: 2px solid white;
-			box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			${type === 'current' ? 'animation: pulse 1.5s infinite;' : ''}
-		">
-			<span style="color: white; font-size: 10px; font-weight: bold;">${index + 1}</span>
-		</div>`;
-	return new AMap.Marker({
-		position: [stop.longitude, stop.latitude],
-		content,
-		offset: new AMap.Pixel(size / -2, size / -2),
 	});
 };
 
@@ -468,11 +425,6 @@ const clearMap = () => {
 		map.remove(routePolylines);
 		routePolylines = [];
 	}
-	// 清除站点
-	if (stopMarkers.length) {
-		map.remove(stopMarkers);
-		stopMarkers = [];
-	}
 };
 
 // 更新地图显示
@@ -498,23 +450,6 @@ const updateMap = () => {
 			map.add(polyline);
 			overlaysForView.push(polyline);
 		}
-
-		// 站点
-		busstops.forEach((stop, index) => {
-			if (stop.latitude && stop.longitude) {
-				let type = 'normal';
-				if (index === 0) type = 'start';
-				else if (index === busstops.length - 1) type = 'end';
-				else if (index === currentStopIndex) type = 'current';
-				const marker = createStopMarker(stop, type, index);
-				if (marker) {
-					marker.setTitle(`${stop.name} 第 ${index + 1} 站`);
-					stopMarkers.push(marker);
-					map.add(marker);
-					overlaysForView.push(marker);
-				}
-			}
-		});
 
 		// 车辆
 		if (currentPosition) {
