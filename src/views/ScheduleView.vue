@@ -81,6 +81,17 @@
 						:value="r.id"
 					/>
 				</el-select>
+				<el-select
+					v-model="filterDirection"
+					placeholder="运行方向"
+					clearable
+					class="w-28"
+					@change="loadSchedules"
+				>
+					<el-option label="全部" value="" />
+					<el-option label="上行" value="up" />
+					<el-option label="下行" value="down" />
+				</el-select>
 				<el-button type="primary" @click="loadSchedules">
 					<el-icon class="mr-1"><Search /></el-icon>
 					查询
@@ -142,6 +153,13 @@
 				<el-table-column prop="arrival_time" label="到达时间" min-width="160">
 					<template #default="{ row }">
 						{{ formatDateTime(row.arrival_time) || '-' }}
+					</template>
+				</el-table-column>
+				<el-table-column prop="direction" label="方向" width="80" align="center">
+					<template #default="{ row }">
+						<el-tag :type="row.direction === 'up' ? 'primary' : 'success'" size="small">
+							{{ row.direction === 'up' ? '上行' : '下行' }}
+						</el-tag>
 					</template>
 				</el-table-column>
 				<el-table-column prop="status" label="状态" width="100" align="center">
@@ -274,7 +292,7 @@
 						</el-option>
 					</el-select>
 				</el-form-item>
-				<el-form-item label="预计发车时间" prop="scheduled_departure_time">
+				<el-form-item label="预计发车" prop="scheduled_departure_time">
 					<el-date-picker
 						v-model="form.scheduled_departure_time"
 						type="datetime"
@@ -283,6 +301,12 @@
 						value-format="YYYY-MM-DDTHH:mm:ss"
 						class="w-full"
 					/>
+				</el-form-item>
+				<el-form-item label="运行方向" prop="direction">
+					<el-radio-group v-model="form.direction">
+						<el-radio value="up">上行</el-radio>
+						<el-radio value="down">下行</el-radio>
+					</el-radio-group>
 				</el-form-item>
 				<el-form-item v-if="isEdit" label="班次状态" prop="status">
 					<el-select v-model="form.status" placeholder="请选择状态" class="w-full">
@@ -338,6 +362,7 @@ const filterStatus = ref('');
 const filterVehicleId = ref('');
 const filterEmployeeId = ref('');
 const filterRouteId = ref('');
+const filterDirection = ref('');
 
 // 分页
 const currentPage = ref(1);
@@ -356,6 +381,7 @@ const form = reactive({
 	vehicle_id: '',
 	employee_id: '',
 	scheduled_departure_time: '',
+	direction: 'up',
 	status: 'scheduled',
 });
 
@@ -443,6 +469,9 @@ const loadSchedules = async () => {
 		if (filterRouteId.value) {
 			params.route_id = filterRouteId.value;
 		}
+		if (filterDirection.value) {
+			params.direction = filterDirection.value;
+		}
 		if (filterDateRange.value && filterDateRange.value.length === 2) {
 			params.start_date = filterDateRange.value[0];
 			params.end_date = filterDateRange.value[1];
@@ -480,6 +509,7 @@ const resetFilters = () => {
 	filterVehicleId.value = '';
 	filterEmployeeId.value = '';
 	filterRouteId.value = '';
+	filterDirection.value = '';
 	loadSchedules();
 };
 
@@ -490,6 +520,7 @@ const resetForm = () => {
 	form.vehicle_id = '';
 	form.employee_id = '';
 	form.scheduled_departure_time = '';
+	form.direction = 'up';
 	form.status = 'scheduled';
 	isEdit.value = false;
 	routeOptions.value = [];
@@ -512,6 +543,7 @@ const handleEdit = async (row) => {
 	form.vehicle_id = row.vehicle_id;
 	form.employee_id = row.employee_id;
 	form.scheduled_departure_time = row.scheduled_departure_time;
+	form.direction = row.direction || 'up';
 	form.status = row.status;
 	// 将当前线路添加到选项中
 	if (row.route) {
@@ -586,23 +618,25 @@ const handleSubmit = async () => {
 		submitting.value = true;
 
 		if (isEdit.value) {
-			// 编辑时可以更新预计发车时间、关联ID和状态
+			// 编辑时可以更新预计发车时间、关联ID、方向和状态
 			const payload = {
 				route_id: form.route_id,
 				vehicle_id: form.vehicle_id,
 				employee_id: form.employee_id,
 				scheduled_departure_time: form.scheduled_departure_time,
+				direction: form.direction,
 				status: form.status,
 			};
 			await updateSchedule(form.id, payload);
 			ElMessage.success('更新成功');
 		} else {
-			// 创建时只需要提交预计发车时间和关联ID
+			// 创建时提交预计发车时间、关联ID和方向
 			const payload = {
 				route_id: form.route_id,
 				vehicle_id: form.vehicle_id,
 				employee_id: form.employee_id,
 				scheduled_departure_time: form.scheduled_departure_time,
+				direction: form.direction,
 			};
 			await createSchedule(payload);
 			ElMessage.success('创建成功');

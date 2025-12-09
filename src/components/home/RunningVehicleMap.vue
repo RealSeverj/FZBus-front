@@ -62,12 +62,22 @@
 					>
 						<div class="flex items-center justify-between mb-1">
 							<span class="font-semibold text-primary">{{ vehicle.vehicle?.plate_number || '未知车牌' }}</span>
-							<el-tag size="small" type="warning">运行中</el-tag>
+							<div class="flex items-center gap-1">
+								<el-tag size="small" :type="vehicle.schedule.direction === 'up' ? 'primary' : 'success'">
+									{{ vehicle.schedule.direction === 'up' ? '上行' : '下行' }}
+								</el-tag>
+								<el-tag size="small" type="warning">运行中</el-tag>
+							</div>
 						</div>
 						<div class="text-xs text-gray-500 space-y-1">
 							<div class="flex items-center gap-1">
 								<el-icon><Guide /></el-icon>
 								<span>{{ vehicle.route?.code }} {{ vehicle.route?.name }}</span>
+							</div>
+							<div class="flex items-center gap-1 text-gray-400">
+								<span>起点: {{ getOriginByDirection(vehicle) }}</span>
+								<span>→</span>
+								<span>终点: {{ getDestinationByDirection(vehicle) }}</span>
 							</div>
 							<div class="flex items-center gap-1">
 								<el-icon><User /></el-icon>
@@ -297,6 +307,38 @@ const formatEstimatedArrival = (arrivalDate) => {
 	});
 };
 
+// 根据方向获取起点（模板用）
+const getOriginByDirection = (vehicle) => {
+	const route = vehicle.route;
+	if (!route) return '未知';
+	const direction = vehicle.schedule?.direction || 'up';
+	return direction === 'up' ? (route.origin || '未知') : (route.destination || '未知');
+};
+
+// 根据方向获取终点（模板用）
+const getDestinationByDirection = (vehicle) => {
+	const route = vehicle.route;
+	if (!route) return '未知';
+	const direction = vehicle.schedule?.direction || 'up';
+	return direction === 'up' ? (route.destination || '未知') : (route.origin || '未知');
+};
+
+// 根据方向获取起点（纯函数，用于 InfoWindow）
+const getOriginByDirectionRaw = (vehicle) => {
+	const route = vehicle.route;
+	if (!route) return '未知';
+	const direction = vehicle.schedule?.direction || 'up';
+	return direction === 'up' ? (route.origin || '未知') : (route.destination || '未知');
+};
+
+// 根据方向获取终点（纯函数，用于 InfoWindow）
+const getDestinationByDirectionRaw = (vehicle) => {
+	const route = vehicle.route;
+	if (!route) return '未知';
+	const direction = vehicle.schedule?.direction || 'up';
+	return direction === 'up' ? (route.destination || '未知') : (route.origin || '未知');
+};
+
 // 初始化地图（高德）
 const initMap = async () => {
 	if (!mapContainer.value) return;
@@ -344,7 +386,17 @@ const loadRunningVehicles = async () => {
 					});
 
 					// 规范化站点坐标（从 location 拆出经纬度）
-					const normalizedBusstops = normalizeBusstops(routeDetail.busstops || []);
+					let normalizedBusstops = normalizeBusstops(routeDetail.busstops || []);
+
+					// 解析路径
+					let pathPoints = parsePolyline(routeDetail.polyline);
+
+					// 如果是下行方向，反转路径和站点顺序
+					const direction = schedule.direction || 'up';
+					if (direction === 'down') {
+						pathPoints = pathPoints.slice().reverse();
+						normalizedBusstops = normalizedBusstops.slice().reverse();
+					}
 
 					// 计算车辆当前位置
 					const departureTime = new Date(schedule.departure_time);
@@ -352,8 +404,6 @@ const loadRunningVehicles = async () => {
 					const elapsedSeconds = (now - departureTime) / 1000;
 					const traveledDistance = elapsedSeconds * AVERAGE_SPEED_MS;
 
-					// 解析路径
-					const pathPoints = parsePolyline(routeDetail.polyline);
 					const currentPosition = getPositionOnPath(pathPoints, traveledDistance);
 
 					// 计算路线总长度
@@ -463,6 +513,12 @@ const updateMap = () => {
 						</h4>
 						<p style="margin: 4px 0; font-size: 12px;">
 							<strong>线路:</strong> ${vehicle.route?.code} ${vehicle.route?.name}
+							<span style="margin-left: 8px; padding: 2px 6px; border-radius: 4px; font-size: 10px; background: ${schedule.direction === 'up' ? '#409EFF' : '#67C23A'}; color: white;">
+								${schedule.direction === 'up' ? '上行' : '下行'}
+							</span>
+						</p>
+						<p style="margin: 4px 0; font-size: 12px; color: #888;">
+							<strong>起点:</strong> ${getOriginByDirectionRaw(vehicle)} → <strong>终点:</strong> ${getDestinationByDirectionRaw(vehicle)}
 						</p>
 						<p style="margin: 4px 0; font-size: 12px;">
 							<strong>司机:</strong> ${vehicle.employee?.name || '未知'}
