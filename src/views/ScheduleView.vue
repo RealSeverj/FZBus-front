@@ -490,7 +490,7 @@ const loadRelatedData = async () => {
 	try {
 		const [vehicles, employees, routesRes] = await Promise.all([
 			fetchVehicles(),
-			fetchEmployees(),
+			fetchEmployees({ role: '司机' }), // 只获取司机角色员工
 			fetchRoutes({ per_page: 100 }),
 		]);
 		allVehicles.value = vehicles || [];
