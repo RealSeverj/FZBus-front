@@ -220,7 +220,8 @@
 			width="600px"
 			destroy-on-close
 		>
-			<div v-if="currentBusstop" class="space-y-4">
+			<div v-loading="detailLoading" class="min-h-[200px]">
+			<div v-if="currentBusstop && !detailLoading" class="space-y-4">
 				<el-descriptions :column="2" border>
 					<el-descriptions-item label="ID">{{ currentBusstop.id }}</el-descriptions-item>
 					<el-descriptions-item label="高德ID">{{ currentBusstop.amap_id }}</el-descriptions-item>
@@ -262,12 +263,9 @@
 					暂无经停线路信息
 				</div>
 			</div>
+			</div>
 			<template #footer>
-				<div class="flex justify-between">
-					<el-button type="primary" @click="handleLocate(currentBusstop)">
-						<el-icon class="mr-1"><Aim /></el-icon>
-						在地图上定位
-					</el-button>
+				<div class="flex justify-end">
 					<el-button @click="detailDialogVisible = false">关闭</el-button>
 				</div>
 			</template>
@@ -427,6 +425,7 @@ const formRef = ref(null);
 
 // 详情对话框
 const detailDialogVisible = ref(false);
+const detailLoading = ref(false);
 const currentBusstop = ref(null);
 const busstopRoutes = ref([]);
 
@@ -590,8 +589,13 @@ const updateMapMarkers = () => {
 
 // 全局函数：显示站点详情
 window.showBusstopDetail = async (id) => {
-	await loadBusstopDetail(id);
 	detailDialogVisible.value = true;
+	detailLoading.value = true;
+	try {
+		await loadBusstopDetail(id);
+	} finally {
+		detailLoading.value = false;
+	}
 };
 
 // 切换显示全部标记
@@ -689,9 +693,14 @@ const resetForm = () => {
 
 // 点击表格行
 const handleRowClick = async (row) => {
-	await loadBusstopDetail(row.id);
 	detailDialogVisible.value = true;
+	detailLoading.value = true;
 	handleLocate(row);
+	try {
+		await loadBusstopDetail(row.id);
+	} finally {
+		detailLoading.value = false;
+	}
 };
 
 // 添加站点

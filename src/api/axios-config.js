@@ -3,6 +3,7 @@
 
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
+import router from '../router/index.js';
 
 // 可以根据需要调整为 /api 前缀，看后端是否有蓝图前缀
 // 这里先直接指向 Flask 服务根路径
@@ -44,6 +45,12 @@ instance.interceptors.response.use(
 			if (response.status === 401) {
 				// 简单清理本地 token，后续可以在这里触发登出逻辑
 				localStorage.removeItem('access_token');
+			}
+
+			if (response.status === 422) {
+				// 清理本地 token 并跳转到登录页面
+				localStorage.removeItem('access_token');
+				router.push('/login');
 			}
 		} else {
 			ElMessage.error('网络异常，请检查服务器或网络连接');
