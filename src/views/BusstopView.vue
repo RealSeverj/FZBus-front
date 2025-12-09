@@ -772,16 +772,28 @@ const handleLocate = (row) => {
 };
 
 // 定位到我的位置
+let myLocationMarker = null;
+
 const handleLocateMe = () => {
 	if (!navigator.geolocation) {
 		ElMessage.warning('您的浏览器不支持定位功能');
 		return;
 	}
 
+	ElMessage.info('正在获取位置...');
+
 	navigator.geolocation.getCurrentPosition(
 		(position) => {
 			const { latitude, longitude } = position.coords;
-			map.setView([latitude, longitude], 15);
+			
+			// 高德地图使用 setZoomAndCenter 方法
+			map.setZoomAndCenter(15, [longitude, latitude]);
+
+			// 移除之前的位置标记
+			if (myLocationMarker) {
+				map.remove(myLocationMarker);
+				myLocationMarker = null;
+			}
 
 			// 添加我的位置标记
 			const content = `<div style="
@@ -792,20 +804,35 @@ const handleLocateMe = () => {
 				border: 3px solid white;
 				box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 			"></div>`;
-			const marker = new AMap.Marker({
+			myLocationMarker = new AMap.Marker({
 				position: [longitude, latitude],
 				content,
 				offset: new AMap.Pixel(-8, -8),
 			});
-			map.add(marker);
+			map.add(myLocationMarker);
 
 			// 设置附近搜索的默认坐标
 			nearbySearch.longitude = longitude;
 			nearbySearch.latitude = latitude;
+
+			ElMessage.success('定位成功');
 		},
 		(error) => {
 			console.error('定位失败:', error);
-			ElMessage.warning('定位失败，请检查定位权限');
+			let msg = '定位失败，请检查定位权限';
+			if (error.code === 1) {
+				msg = '定位权限被拒绝，请在浏览器设置中允许定位';
+			} else if (error.code === 2) {
+				msg = '无法获取位置信息';
+			} else if (error.code === 3) {
+				msg = '定位超时，请重试';
+			}
+			ElMessage.warning(msg);
+		},
+		{
+			enableHighAccuracy: true,
+			timeout: 10000,
+			maximumAge: 0,
 		},
 	);
 };
