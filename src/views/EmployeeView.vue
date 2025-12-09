@@ -83,7 +83,7 @@
 				</el-table-column>
 				<el-table-column prop="hire_date" label="入职日期" width="120" align="center">
 					<template #default="{ row }">
-						{{ row.hire_date || '-' }}
+						{{ formatDate(row.hire_date) }}
 					</template>
 				</el-table-column>
 				<el-table-column prop="active" label="状态" width="100" align="center">
@@ -349,6 +349,17 @@ const getRoleTagType = (role) => {
 		维修工: 'info',
 	};
 	return typeMap[role] || 'default';
+};
+
+// 格式化日期
+const formatDate = (dateString) => {
+	if (!dateString) return '-';
+	const date = new Date(dateString);
+	return date.toLocaleDateString('zh-CN', {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	});
 };
 
 // 加载员工列表
